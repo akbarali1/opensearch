@@ -49,8 +49,8 @@ class HomeController extends Controller
     {
         //        $this->request();
         //http://localhost:5601
-        $client = $this->openSearchClient
-            ->setHosts(['https://localhost:9200'])
+        /*$client = $this->openSearchClient
+            ->setHosts(['https://localhost:9201'])
             ->setBasicAuthentication('admin', 'admin')
             ->setSSLVerification(false)
             ->build();
@@ -58,21 +58,21 @@ class HomeController extends Controller
         $indexName = 'products';
 
         // Create an index with non-default settings.
-        /*try {
+        try {
             $client->indices()->create([
                 'index' => $indexName,
-                'body' => [
+                'body'  => [
                     'settings' => [
                         'index' => [
-                            'number_of_shards' => 4
-                        ]
-                    ]
-                ]
+                            'number_of_shards' => 4,
+                        ],
+                    ],
+                ],
             ]);
-        }catch (\Exception $exception){
+        } catch (\Exception $exception) {
             dump($exception->getMessage());
-        }*/
-        //        dd($client);
+        }
+        dd($client);*/
 
         $cr = $client->create([
             'index' => $indexName,
@@ -115,7 +115,7 @@ class HomeController extends Controller
 
     public function products()
     {
-        $client    = $this->openSearchClient->setHosts(['https://localhost:9200'])
+        $client    = $this->openSearchClient->setHosts(['https://localhost:9201'])
             ->setBasicAuthentication('admin', 'admin')
             ->setSSLVerification(false)
             ->build();
@@ -128,7 +128,8 @@ class HomeController extends Controller
             )
             ->limit(5)
             ->get()->toArray();
-        $arr       = [];
+        // dd($products);
+        $arr = [];
         foreach ($products as $product) {
             $name  = [
                 'name_ru' => $product['name']['ru'],
@@ -151,8 +152,14 @@ class HomeController extends Controller
 
     public function search()
     {
-        $text   = request()->get('search');
-        $client = $this->openSearchClient->setHosts(['https://localhost:9200'])
+        if (!request()->has('q')) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Query is required',
+            ]);
+        }
+        $text   = request()->get('q');
+        $client = $this->openSearchClient->setHosts(['https://localhost:9201'])
             ->setBasicAuthentication('admin', 'admin')
             ->setSSLVerification(false)
             ->build();
@@ -171,6 +178,6 @@ class HomeController extends Controller
                 ],
             ],
         ]);
-        dd($search['hits']['hits']);
+        dd($search);
     }
 }
