@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use Algolia\AlgoliaSearch\SearchClient;
 use App\Models\ProductModel;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\GuzzleException;
@@ -49,30 +50,30 @@ class HomeController extends Controller
     {
         //        $this->request();
         //http://localhost:5601
-        /*$client = $this->openSearchClient
+        $client    = $this->openSearchClient
             ->setHosts(['https://localhost:9201'])
             ->setBasicAuthentication('admin', 'admin')
             ->setSSLVerification(false)
             ->build();
-
         $indexName = 'products';
 
-        // Create an index with non-default settings.
-        try {
-            $client->indices()->create([
-                'index' => $indexName,
-                'body'  => [
-                    'settings' => [
-                        'index' => [
-                            'number_of_shards' => 4,
+        /*
+                // Create an index with non-default settings.
+                try {
+                    $client->indices()->create([
+                        'index' => $indexName,
+                        'body'  => [
+                            'settings' => [
+                                'index' => [
+                                    'number_of_shards' => 4,
+                                ],
+                            ],
                         ],
-                    ],
-                ],
-            ]);
-        } catch (\Exception $exception) {
-            dump($exception->getMessage());
-        }
-        dd($client);*/
+                    ]);
+                } catch (\Exception $exception) {
+                    dump($exception->getMessage());
+                }
+                dd($client);*/
 
         $cr = $client->create([
             'index' => $indexName,
@@ -178,6 +179,69 @@ class HomeController extends Controller
                 ],
             ],
         ]);
-        dd($search);
+        foreach ($search['hits']['hits'] as $hit) {
+            $data[] = $hit['_source'];
+        }
+
+        return response()->json($data ?? []);
+    }
+
+    public function prefix()
+    {
+        if (!request()->has('q')) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Query is required',
+            ]);
+        }
+        $text   = request()->get('q');
+        $client = $this->openSearchClient->setHosts(['https://localhost:9201'])
+            ->setBasicAuthentication('admin', 'admin')
+            ->setSSLVerification(false)
+            ->build();
+        $search = $client->search([
+            'index' => 'products',
+            'body'  => [
+                'query' => [
+                    'simple_query_string' => [
+                        'query'                               => $text.'*',
+                        'fields'                              => [
+                            'name_ru',
+                            'name_uz',
+                        ],
+                        'flags'                               => 'ALL',
+                        'fuzzy_transpositions'                => true,
+                        'fuzzy_max_expansions'                => 50,
+                        'fuzzy_prefix_length'                 => 0,
+                        'minimum_should_match'                => 1,
+                        'default_operator'                    => 'or',
+                        'auto_generate_synonyms_phrase_query' => true,
+                    ],
+                ],
+            ],
+        ]);
+        foreach ($search['hits']['hits'] as $hit) {
+            $data[] = $hit['_source'];
+        }
+
+        return response()->json($data ?? []);
+    }
+
+    public function algolia()
+    {
+        if (!request()->has('q')) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Query is required',
+            ]);
+        }
+        $text = request()->get('q');
+
+        $client  = SearchClient::create("A5B4K31EU0", "eda4859f22aa9dece7d7a0ca766b0dc0");
+        $index   = $client->initIndex("products");
+        $results = $index->search($text);
+        dd($results);
+
+        return response()->json($results ?? []);
     }
 }

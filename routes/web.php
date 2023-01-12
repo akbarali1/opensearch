@@ -18,5 +18,8 @@ Route::controller(HomeController::class)->group(function () {
     Route::get('/', 'index');
     Route::get('/products', 'products');
     Route::get('/search', 'search');
+    Route::get('/prefix', 'prefix');
+
+    Route::get('/algolia', 'algolia');
 
 });
