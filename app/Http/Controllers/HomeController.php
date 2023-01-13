@@ -200,6 +200,7 @@ class HomeController extends Controller
             ->setSSLVerification(false)
             ->build();
         $search = $client->search([
+            //note 11s 6/64 star
             'index' => 'products',
             'body'  => [
                 'query' => [
@@ -224,7 +225,12 @@ class HomeController extends Controller
             $data[] = $hit['_source'];
         }
 
-        return response()->json($data ?? []);
+        return response()->json(
+            [
+                'text' => $text,
+                'data' => $data ?? [],
+            ]
+        );
     }
 
     public function algolia()
