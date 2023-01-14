@@ -194,41 +194,28 @@ class HomeController extends Controller
                 'message' => 'Query is required',
             ]);
         }
-        $text   = request()->get('q');
-        $client = $this->openSearchClient->setHosts(['https://localhost:9201'])
-            ->setBasicAuthentication('admin', 'admin')
-            ->setSSLVerification(false)
-            ->build();
-        $search = $client->search([
-            //note 11s 6/64 star
-            'index' => 'products',
-            'body'  => [
-                'query' => [
-                    'simple_query_string' => [
-                        'query'                               => $text.'*',
-                        'fields'                              => [
-                            'name_ru',
-                            'name_uz',
-                        ],
-                        'flags'                               => 'ALL',
-                        'fuzzy_transpositions'                => true,
-                        'fuzzy_max_expansions'                => 50,
-                        'fuzzy_prefix_length'                 => 0,
-                        'minimum_should_match'                => 1,
-                        'default_operator'                    => 'or',
-                        'auto_generate_synonyms_phrase_query' => true,
-                    ],
-                ],
-            ],
-        ]);
+        $text = request()->get('q');
+        try {
+            $client = $this->openSearchClient->setHosts(['https://localhost:9201'])
+                ->setBasicAuthentication('admin', 'admin')
+                ->setSSLVerification(false)
+                ->build();
+            $search = $client->search($this->formatSearch($text));
+        } catch (\Exception $exception) {
+            return response()->json(json_decode($exception->getMessage(), true));
+        }
         foreach ($search['hits']['hits'] as $hit) {
-            $data[] = $hit['_source'];
+            $hit['_source']['_score']    = $hit['_score'];
+            $hit['_source']['highlight'] = $hit['highlight'];
+            $data[]                      = $hit['_source'];
         }
 
         return response()->json(
             [
-                'text' => $text,
-                'data' => $data ?? [],
+                'text'  => $text,
+                'total' => $search['hits']['total']['value'],
+                'data'  => $data ?? [],
+                // 'search' => $search,
             ]
         );
     }
@@ -249,5 +236,218 @@ class HomeController extends Controller
         dd($results);
 
         return response()->json($results ?? []);
+    }
+
+    //Text check cyrillic to latin and latin to cyrillic
+    public function transliterate($text)
+    {
+        $cyr = [
+            'А',
+            'Б',
+            'В',
+            'Г',
+            'Д',
+            'Е',
+            'Ё',
+            'Ж',
+            'З',
+            'И',
+            'Й',
+            'К',
+            'Л',
+            'М',
+            'Н',
+            'О',
+            'П',
+            'Р',
+            'С',
+            'Т',
+            'У',
+            'Ф',
+            'Х',
+            'Ц',
+            'Ч',
+            'Ш',
+            'Щ',
+            'Ъ',
+            'Ы',
+            'Ь',
+            'Э',
+            'Ю',
+            'Я',
+            'а',
+            'б',
+            'в',
+            'г',
+            'д',
+            'е',
+            'ё',
+            'ж',
+            'з',
+            'и',
+            'й',
+            'к',
+            'л',
+            'м',
+            'н',
+            'о',
+            'п',
+            'р',
+            'с',
+            'т',
+            'у',
+            'ф',
+            'х',
+            'ц',
+            'ч',
+            'ш',
+            'щ',
+            'ъ',
+            'ы',
+            'ь',
+            'э',
+            'ю',
+            'я',
+        ];
+        $lat = [
+            'A',
+            'B',
+            'V',
+            'G',
+            'D',
+            'E',
+            'E',
+            'J',
+            'Z',
+            'I',
+            'Y',
+            'K',
+            'L',
+            'M',
+            'N',
+            'O',
+            'P',
+            'R',
+            'S',
+            'T',
+            'U',
+            'F',
+            'H',
+            'C',
+            'CH',
+            'SH',
+            'SH',
+            '',
+            'Y',
+            '',
+            'E',
+            'YU',
+            'YA',
+            'a',
+            'b',
+            'v',
+            'g',
+            'd',
+            'e',
+            'e',
+            'j',
+            'z',
+            'i',
+            'y',
+            'k',
+            'l',
+            'm',
+            'n',
+            'o',
+            'p',
+            'r',
+            's',
+            't',
+            'u',
+            'f',
+            'h',
+            'c',
+            'ch',
+            'sh',
+            'sh',
+            '',
+            'y',
+            '',
+            'e',
+            'yu',
+            'ya',
+        ];
+        //text check cyrillic
+        if (preg_match('/[А-Яа-яЁё]/u', $text)) {
+            return str_replace($cyr, $lat, $text);
+        }
+        //text check latin
+        if (preg_match('/[A-Za-z]/u', $text)) {
+            return str_replace($lat, $cyr, $text);
+        }
+    }
+
+    private function formatSearch($text): array
+    {
+        return [
+            //note 11s 6/64 star
+            'index' => 'products',
+            'body'  => [
+                'from'      => 0,
+                'size'      => 10000,
+                'highlight' => [
+                    //"order"  => "score",
+                    'fields' => [
+                        'name_ru'    => [
+                            'pre_tags'  => ['<b>'],
+                            'post_tags' => ['</b>'],
+                        ],
+                        'name_uz'    => [
+                            'pre_tags'  => ['<b>'],
+                            'post_tags' => ['</b>'],
+                        ],
+                        'text_entry' => [
+                            'type' => 'plain',
+                        ],
+                    ],
+                ],
+                'query'     => [
+                    /*'multi_match' => [
+                        'fields'               => [
+                            'name_ru',
+                            'name_uz',
+                        ],
+                        'query'                => $text.'*'.' | '.$this->transliterate($text).'*',
+                        'fuzziness'            => 'AUTO',
+                        'fuzzy_transpositions' => true,
+                        'minimum_should_match' => 1,
+                        'analyzer'             => 'standard',
+                        'boost'                => 1,
+                        'prefix_length'        => 3,
+                        'max_expansions'       => 50,
+                        //'operator'             => 'or',
+                    ],*/
+                    'simple_query_string' => [
+                        'query'                               => $text.'*'.' | '.$this->transliterate($text).'*',
+                        'fields'                              => [
+                            'name_uz',
+                            'name_ru',
+                        ],
+                        'flags'                               => 'ALL',
+                        'fuzzy_transpositions'                => true,
+                        'fuzzy_max_expansions'                => 50,
+                        'fuzzy_prefix_length'                 => 0,
+                        'minimum_should_match'                => 1,
+                        'default_operator'                    => 'OR',
+                        'analyzer'                            => 'standard',
+                        'lenient'                             => false,
+                        'quote_field_suffix'                  => '',
+                        'analyze_wildcard'                    => true,
+                        'auto_generate_synonyms_phrase_query' => true,
+                        'boost'                               => 1,
+                    ],
+                ],
+            ],
+        ];
     }
 }
