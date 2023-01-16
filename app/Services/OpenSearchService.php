@@ -1,27 +1,20 @@
 <?php
 
-namespace App\Http\Services;
+namespace App\Services;
 
-use App\DataObjects\DataObjectCollection;
-use App\Filters\Web\Product\PriceFilter;
-use App\Filters\Web\Product\SortFilter;
 use App\Models\ProductModel;
-use App\Services\AdminService;
-use App\Services\ProductService;
-use App\Services\TelegramService;
-use App\ViewModels\Web\Product\ProductSearchViewModel;
+use Illuminate\Routing\Pipeline;
 use JetBrains\PhpStorm\NoReturn;
 use OpenSearch\Client;
 use OpenSearch\ClientBuilder;
-use Illuminate\Routing\Pipeline;
 
 /**
  * Created by PhpStorm.
- * Filename: OpenSearchService.php
+ * Filename: ${FILE_NAME}
  * Project Name: opensearch
  * Author: akbarali
  * Date: 16/01/2023
- * Time: 20:09
+ * Time: 20:21
  * Github: https://github.com/akbarali1
  * Telegram: @akbar_aka
  * E-mail: me@akbarali.uz
@@ -123,7 +116,7 @@ class OpenSearchService
         } catch (\Exception $exception) {
             dd(print_r($exception->getMessage()));
         }
-        dd($client);
+        dump($client);
     }
 
     public function createSearchData(string $index, $body, $id = false): callable|array
@@ -139,10 +132,10 @@ class OpenSearchService
         return $this->setClient->index($params);
     }
 
-    public function deleteIndex(): void
+    public function deleteIndex(string $indexName): void
     {
         $client = $this->setClient->indices()->delete([
-            'index' => self::INDEX_NAME,
+            'index' => $indexName,
         ]);
         dump($client);
     }
@@ -150,15 +143,16 @@ class OpenSearchService
     //Reindex
     public function reindex(): void
     {
-        $this->deleteIndex();
-        $this->createIndex(self::INDEX_NAME);
+        $this->deleteIndex(self::INDEX_NAME);
+        $this->createIndex(self::INDEX_NAME, $this->synonymParams());
+        $this->addAllProducts();
     }
 
-    public function getSettings(): void
+    public function getSettings(string $indexName): void
     {
         try {
             $client = $this->setClient->indices()->getSettings([
-                'index' => self::INDEX_NAME,
+                'index' => $indexName,
             ]);
         } catch (\Exception $exception) {
             dd(print_r($exception->getMessage()));
@@ -172,7 +166,6 @@ class OpenSearchService
             ->select(
                 'id',
                 'name',
-                //'slug',
                 'model',
                 'price',
                 'mxik',
@@ -194,18 +187,23 @@ class OpenSearchService
                 'name_uz' => $product['name']['uz'],
             ]);
             $arr[] = $this->createSearchData(self::INDEX_NAME, $merge, $product['id']);
+            /*$this->setClient->index([
+                'index' => self::INDEX_NAME,
+                'id'    => $product['id'],
+                'body'  => $merge,
+            ]);*/
         }
         dd($arr);
     }
 
     //index get all data
-    public function getAllData(string $indexName): void
+    #[NoReturn] public function getIndexAllData(string $indexName): void
     {
         $params = [
             'index' => $indexName,
             'body'  => [
                 'query' => [
-                    'match_all' => new \stdClass(),
+                    'match_all' => [],
                 ],
             ],
         ];
@@ -254,8 +252,7 @@ class OpenSearchService
         $model->select('products.*');
         $count = $model->count();
         $skip  = $limit * ($page - 1);
-        $query = $model->skip($skip)->take($limit)->get();
-        $items = (new ProductService())->findImageMerge($query->pluck('id'), $query, true);
+        $items = $model->skip($skip)->take($limit)->get();
         $items = $items->transform(function ($item) use ($parseSearch) {
             $intend_price         = $item->intend_price;
             $item                 = $item->toArray();
@@ -312,7 +309,7 @@ class OpenSearchService
                         //'operator'             => 'or',
                     ],*/
                     'simple_query_string' => [
-                        'query'                               => $text.'*'.' | '.AdminService::cyrillicToLatin($text).'*',
+                        'query'                               => $text.'*'.' | '.$this->transliterate($text).'*',
                         'fields'                              => [
                             'name_uz',
                             'name_ru',
@@ -340,5 +337,152 @@ class OpenSearchService
         ];
     }
 
+    private function transliterate($text): string
+    {
+        $cyr = [
+            'А',
+            'Б',
+            'В',
+            'Г',
+            'Д',
+            'Е',
+            'Ё',
+            'Ж',
+            'З',
+            'И',
+            'Й',
+            'К',
+            'Л',
+            'М',
+            'Н',
+            'О',
+            'П',
+            'Р',
+            'С',
+            'Т',
+            'У',
+            'Ф',
+            'Х',
+            'Ц',
+            'Ч',
+            'Ш',
+            'Щ',
+            'Ъ',
+            'Ы',
+            'Ь',
+            'Э',
+            'Ю',
+            'Я',
+            'а',
+            'б',
+            'в',
+            'г',
+            'д',
+            'е',
+            'ё',
+            'ж',
+            'з',
+            'и',
+            'й',
+            'к',
+            'л',
+            'м',
+            'н',
+            'о',
+            'п',
+            'р',
+            'с',
+            'т',
+            'у',
+            'ф',
+            'х',
+            'ц',
+            'ч',
+            'ш',
+            'щ',
+            'ъ',
+            'ы',
+            'ь',
+            'э',
+            'ю',
+            'я',
+        ];
+        $lat = [
+            'A',
+            'B',
+            'V',
+            'G',
+            'D',
+            'E',
+            'E',
+            'J',
+            'Z',
+            'I',
+            'Y',
+            'K',
+            'L',
+            'M',
+            'N',
+            'O',
+            'P',
+            'R',
+            'S',
+            'T',
+            'U',
+            'F',
+            'H',
+            'C',
+            'CH',
+            'SH',
+            'SH',
+            '',
+            'Y',
+            '',
+            'E',
+            'YU',
+            'YA',
+            'a',
+            'b',
+            'v',
+            'g',
+            'd',
+            'e',
+            'e',
+            'j',
+            'z',
+            'i',
+            'y',
+            'k',
+            'l',
+            'm',
+            'n',
+            'o',
+            'p',
+            'r',
+            's',
+            't',
+            'u',
+            'f',
+            'h',
+            'c',
+            'ch',
+            'sh',
+            'sh',
+            '',
+            'y',
+            '',
+            'e',
+            'yu',
+            'ya',
+        ];
+        //text check cyrillic
+        if (preg_match('/[А-Яа-яЁё]/u', $text)) {
+            return str_replace($cyr, $lat, $text);
+        }
+        //text check latin
+        //        if (preg_match('/[A-Za-z]/u', $text)) {
+        return str_replace($lat, $cyr, $text);
+        //        }
+    }
 
 }
